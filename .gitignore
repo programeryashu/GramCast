@@ -1,0 +1,4 @@
+# local workspace metadata — do not commit
+.freebuff/
+.agents/
+node_modules/
