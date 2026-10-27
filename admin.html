@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin dashboard — GRAMCAST AI</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <div class="topbar">
+      <div class="brand">
+        <h1>GRAMCAST AI</h1> <small>Admin dashboard</small>
+      </div>
+      <nav class="topnav">
+        <a href="index.html">Home</a>
+        <a href="dashboard.html">Farmer dashboard</a>
+        <button class="btn-out" id="logoutBtn">Logout</button>
+      </nav>
+    </div>
+
+    <!-- system status -->
+    <section class="card">
+      <h2>Live deployment status <span class="hi-sub">README ke live-agent table ke anusaar</span></h2>
+      <div class="grid cols-4" id="statusGrid"></div>
+      <dl class="kv mt" id="factsList"></dl>
+    </section>
+
+    <section class="card">
+      <h2>Now <span class="hi-sub">is session ka snapshot</span></h2>
+      <div class="grid cols-5" id="statGrid"></div>
+    </section>
+
+    <!-- usage: web vs calls -->
+    <section class="card">
+      <h2>Usage — web dashboard vs phone agent <span class="hi-sub">kitne log web par, kitne call par aaye</span></h2>
+      <div class="grid cols-4" id="usageGrid"></div>
+      <p class="provenance" id="usageNote"></p>
+    </section>
+
+    <!-- users & block -->
+    <section class="card">
+      <h2>Users & access control <span class="hi-sub">kisi bhi account ko block / unblock karein</span></h2>
+      <p class="sub">Blocked users lose access at their next login attempt or page load. (Demo caveat: they could still re-register under a different username until accounts are tied to verified phone numbers.)</p>
+      <div class="provenance sm"><button class="btn sm ok" id="exportUsersBtn">Export Users CSV</button></div>
+      <table id="userTable"><thead><tr><th>User</th><th>Role</th><th>Status</th><th>Action</th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <!-- agent call log -->
+    <section class="card">
+      <h2>Phone agent call log <span class="chip warn">sample data</span></h2>
+      <table id="callTable"><thead><tr><th>When</th><th>Caller</th><th>Village asked</th><th>Duration</th><th>Outcome</th></tr></thead><tbody></tbody></table>
+      <div class="provenance">Sample entries seeded for the demo. Wire an Exotel CDR / webhook export here to replace them with real call data — the schema matches the fields Exotel exposes.</div>
+      <div class="provenance sm"><button class="btn sm ok" id="exportCallLogBtn">Export CSV</button></div>
+    </section>
+
+    <!-- locations registry -->
+    <section class="card">
+      <h2>Panchayat registry <span class="hi-sub">sabhi users ki geocoded locations</span></h2>
+      <p class="sub">Coordinates only become a forecast once get_weather is called for them.</p>
+      <table id="locTable"><thead><tr><th>User</th><th>Place</th><th>District/Region</th><th>lat, lon</th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <!-- forecast log -->
+    <section class="card">
+      <h2>Forecast query log <span class="hi-sub">find_place → get_weather calls made from this browser</span></h2>
+      <table id="logTable"><thead><tr><th>When</th><th>Who</th><th>Place</th><th>Coordinates</th></tr></thead><tbody></tbody></table>
+      <div class="provenance sm"><button class="btn danger sm mt" id="clearLogBtn">Clear log</button> <button class="btn sm ok mt" id="exportLogBtn">Export CSV</button></div></section>
+
+    <!-- repo documents -->
+    <section class="card">
+      <h2>Agent documents <span class="hi-sub">poore prompt aur tool definitions repo se</span></h2>
+      <div class="tabs">
+        <button class="on" data-doc="prompts/GRAMCAST_PROMPT.md">Full prompt</button>
+        <button data-doc="config/agent_setup.md">Agent setup</button>
+        <button data-doc="tools/find_place.md">find_place tool</button>
+        <button data-doc="tools/get_weather.md">get_weather tool</button>
+      </div>
+      <pre class="config" id="docView">Select a document…</pre>
+    </section>
+
+    <!-- guardrails -->
+    <section class="card">
+      <h2>Data honesty rules (enforced) <span class="hi-sub">jo web par bhi, phone par bhi</span></h2>
+      <ul id="rules" style="line-height:1.9; font-size:0.92rem; padding-left:18px;"></ul>
+    </section>
+
+    <!-- WMO reference -->
+    <section class="card">
+      <h2>WMO weather-code speech map <span class="hi-sub">agent wahi map bolta hai jo CLI print karta hai</span></h2>
+      <table id="wmoTable"><thead><tr><th>Code range</th><th>Hindi speech</th><th>English</th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <div class="footer">
+      GRAMCAST AI admin • source: <span id="srcLine">—</span>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    const session = GC.auth.requireRole("admin");
+    if (session) {
+      document.getElementById("logoutBtn").addEventListener("click", GC.auth.logout);
+
+      /* ---- deployment facts ---- */
+      const cards = [
+        ["Agent", GC.FACTS.agent],
+        ["Deployment", GC.FACTS.deploy],
+        ["Phone", GC.FACTS.phone],
+        ["Status", "Active • 24/7"],
+      ];
+      document.getElementById("statusGrid").innerHTML = cards.map(c =>
+        '<div class="day-card stat"><div class="l" style="color:var(--muted); font-size:0.8rem;">' + c[0] +
+        '</div><div style="font-weight:700; margin-top:4px; word-break:break-all;">' + GC.esc(c[1]) + "</div></div>").join("");
+
+      document.getElementById("factsList").innerHTML = [
+        ["Agent", GC.FACTS.agent], ["Deployment", GC.FACTS.deploy],
+        ["Telephony", GC.FACTS.telephony], ["Voice", GC.FACTS.voice],
+        ["Default language", GC.FACTS.language], ["Forecast source", GC.FACTS.source],
+        ["Tools", "find_place (geocoding) → get_weather (forecast)"],
+      ].map(p => "<dt>" + p[0] + "</dt><dd>" + GC.esc(p[1]) + "</dd>").join("");
+
+      /* ---- stats ---- */
+      const users = GC.store.get("users", []);
+      const allLocs = [];
+      users.forEach(u => GC.store.get("locs_" + u.id, []).forEach(l => allLocs.push({ user: u.name, ...l })));
+      const log = GC.store.get("forecast_log", []);
+      const today = new Date().toISOString().slice(0, 10);
+      const todays = log.filter(x => (x.at || "").slice(0, 10) === today).length;
+
+      /* ---- call log: sample seed (replace with Exotel CDR sync) ---- */
+      if (!GC.store.get("call_log", null)) {
+        const d = 24 * 60 * 60 * 1000, now = Date.now();
+        GC.store.set("call_log", [
+          { caller: "+91 987*** 421", village: "Bhondsi, Gurugram, Haryana",  dur: "0:42", at: new Date(now - 0.2*d).toISOString(), outcome: "answered" },
+          { caller: "+91 981*** 037", village: "Begusarai, Bihar",            dur: "1:07", at: new Date(now - 0.4*d).toISOString(), outcome: "answered" },
+          { caller: "+91 946*** 914", village: "Bhundsi (unresolved)",        dur: "0:19", at: new Date(now - 1.1*d).toISOString(), outcome: "answered" },
+          { caller: "+91 958*** 556", village: "Panipat, Haryana",            dur: "0:31", at: new Date(now - 1.9*d).toISOString(), outcome: "answered" },
+          { caller: "+91 946*** 914", village: "Bhundsi (unresolved)",        dur: "0:12", at: new Date(now - 2.2*d).toISOString(), outcome: "no forecast data" },
+        ]);
+      }
+      const calls = GC.store.get("call_log", []);
+      const callers = [...new Set(calls.map(c => c.caller))];
+      const webUsers = [...new Set(log.map(x => x.by).filter(Boolean))];
+
+      function renderStats() {
+        const usersNow = GC.store.get("users", []);
+        const logNow = GC.store.get("forecast_log", []);
+        const todayKey = new Date().toISOString().slice(0, 10);
+        document.getElementById("statGrid").innerHTML = [
+          ["Users", usersNow.length], ["Blocked users", usersNow.filter(u => u.blocked).length], ["Saved Panchayats", allLocs.length],
+          ["Logged queries", logNow.length], ["Queries today", logNow.filter(x => (x.at || "").slice(0, 10) === todayKey).length],
+        ].map(c => '<div class="day-card stat"><div class="v">' + c[1] + '</div><div class="l">' + c[0] + "</div></div>").join("");
+      }
+      renderStats();
+
+      /* ---- usage compare: web vs phone ---- */
+      document.getElementById("usageGrid").innerHTML = [
+        ["Forecast queries on web", log.length, "info"],
+        ["People who used the web", webUsers.length, "ok"],
+        ["Calls to the voice agent", calls.length, "info"],
+        ["People who dialed in", callers.length, "warn"],
+      ].map(c => '<div class="day-card stat"><div class="v">' + c[1] + '</div><div class="l">' + c[0] + "</div></div>").join("");
+      document.getElementById("usageNote").textContent =
+        "Web counts track every find_place → get_weather query in the forecast log (including guests on the landing page). " +
+        "Call counts come from the sample call log below until an Exotel CDR feed is connected.";
+
+      /* ---- registry ---- */
+      const locTb = document.querySelector("#locTable tbody");
+      locTb.innerHTML = allLocs.length ? allLocs.map(l =>
+        "<tr><td>" + GC.esc(l.user) + "</td><td>" + GC.esc(l.place_name) + "</td><td>" +
+        GC.esc([l.district, l.region].filter(Boolean).join(", ") || "—") + "</td><td>" + l.latitude + ", " + l.longitude + "</td></tr>"
+      ).join("") : "<tr><td colspan=4>No saved locations yet.</td></tr>";
+
+      /* ---- users & access control ---- */
+      function renderUsers() {
+        const users2 = GC.store.get("users", []);
+        document.querySelector("#userTable tbody").innerHTML = users2.map(u => {
+          const self = u.id === session.id;
+          return "<tr><td>" + GC.esc(u.name) + " <small style='color:var(--muted)'>@" + GC.esc(u.user) + "</small></td>" +
+            '<td><span class="chip ' + (u.role === "admin" ? "ok" : "info") + '">' + GC.esc(u.role) + "</span></td>" +
+            '<td><span class="chip ' + (u.blocked ? "bad" : "ok") + '">' + (u.blocked ? "blocked" : "active") + "</span></td>" +
+            '<td><button data-act="toggle" data-id="' + u.id + '" class="btn sm ' + (u.blocked ? "out" : "danger") + '" ' +
+            (self ? "disabled title='You cannot block your own session'" : "") + ">" +
+            (u.blocked ? "Unblock" : "Block") + "</button></td></tr>";
+        }).join("");
+      }
+      renderUsers();
+      document.getElementById("exportUsersBtn").addEventListener("click", () => {
+        const users = GC.store.get("users", []);
+        let csv = "User,Role,Status\n";
+        users.forEach(u => {
+          csv += GC.esc(u.name) + "," + GC.esc(u.role) + "," + (u.blocked ? "blocked" : "active") + "\n";
+        });
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = "users.csv";
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+
+      document.getElementById("userTable").addEventListener("click", e => {
+        const btn = e.target.closest("button[data-act]");
+        if (!btn || btn.disabled) return;
+        const id = Number(btn.dataset.id);
+        const u = GC.store.get("users", []).find(x => x.id === id);
+        if (u) GC.auth.setBlocked(id, !u.blocked);
+        renderUsers();
+        renderStats();
+      });
+      /* ---- log ---- */
+      function renderLog() {
+        const rows = GC.store.get("forecast_log", []);
+        document.querySelector("#logTable tbody").innerHTML = rows.length ? rows.map(r =>
+          "<tr><td>" + GC.esc(r.atText || r.at) + "</td><td>" + GC.esc(r.by) + "</td><td>" + GC.esc(r.place) +
+          "</td><td>" + r.lat + ", " + r.lon + "</td></tr>"
+        ).join("") : "<tr><td colspan=4>No queries logged yet.</td></tr>";
+      }
+      renderLog();
+      document.getElementById("clearLogBtn").addEventListener("click", () => {
+        GC.store.set("forecast_log", []); renderLog();
+      });
+      document.getElementById("exportLogBtn").addEventListener("click", () => {
+        const log = GC.store.get("forecast_log", []);
+        let csv = "When,Who,Place,Coordinates\n";
+        log.forEach(r => {
+          const when = (r.at || "").slice(0, 10);
+          csv += when + "," + GC.esc(r.by) + "," + GC.esc(r.place) + "," + r.lat + "," + r.lon + "\n";
+        });
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = "forecast_query_log.csv";
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+
+      /* ---- documents ---- */
+      const docView = document.getElementById("docView");
+      document.querySelectorAll(".tabs button").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          document.querySelectorAll(".tabs button").forEach(b => b.classList.remove("on"));
+          btn.classList.add("on");
+          docView.textContent = "Loading " + btn.dataset.doc + "…";
+          try {
+            const res = await fetch(btn.dataset.doc);
+            if (!res.ok) throw new Error("HTTP " + res.status);
+            docView.textContent = await res.text();
+          } catch (e) {
+            docView.textContent = "Could not load " + btn.dataset.doc + " (" + e.message + ").\n" +
+              "Open it directly: " + btn.dataset.doc + " in the repo.";
+          }
+        });
+      });
+
+      /* ---- guardrails from README / prompt ---- */
+      document.getElementById("rules").innerHTML = [
+        "Open-Meteo model data is the only source; never claim IMD / government provenance.",
+        "A location name is not data — without a returned forecast block, answer is the NO DATA message.",
+        "Never estimate, interpolate or \"fill in\" a plausible value.",
+        "Rain is always probability + intensity, never a guarantee.",
+        "WMO weather codes are translated to plain speech (\"halki baarish\", \"tez baarish\").",
+        "Confidence is communicated honestly; low confidence is never presented as certain.",
+        "Fallback to block forecast is never hidden.",
+        "No invented warnings, no guaranteed crop outcomes, no unnecessary personal questions.",
+      ].map(r => "<li>" + GC.esc(r) + "</li>").join("");
+
+      /* ---- WMO reference table ---- */
+      const wmoRows = [
+        ["0–2", "saaf / mainly saaf aasmaan", "Clear / mainly clear"], ["3", "badal chhaaye hue", "Overcast"],
+        ["45–48", "kohra", "Fog"], ["51–57", "halki runha / buund", "Light drizzle"],
+        ["61–65", "baarish", "Rain"], ["77", "fauwara / baraf ki larhi", "Snow / sleet"],
+        ["80–82", "barasi / garaj-chamak", "Rain showers / thunder"], ["86", "outha hua baarish", "Showers"],
+        ["95", "gajargur-aandhi", "Thunderstorm"], ["99", "kaada garaj purviandhi", "Severe thunderstorm"],
+      ];
+      document.querySelector("#wmoTable tbody").innerHTML = wmoRows.map(r =>
+        "<tr><td>" + r[0] + "</td><td>" + r[1] + "</td><td>" + r[2] + "</td></tr>").join("");
+
+      /* ---- call log table ---- */
+      document.querySelector("#callTable tbody").innerHTML = calls.length ? calls.map(c =>
+        "<tr><td>" + new Date(c.at).toLocaleString("en-IN") + "</td><td>" + GC.esc(c.caller) + "</td><td>" + GC.esc(c.village) +
+        "</td><td>" + GC.esc(c.dur) + "</td><td><span class=" + (c.outcome === "answered" ? '"chip ok"' : '"chip warn"') + ">" + GC.esc(c.outcome) + "</span></td></tr>"
+      ).join("") : "<tr><td colspan=5>No calls yet.</td></tr>";
+
+      /* ---- call log CSV export ---- */
+      document.getElementById("exportCallLogBtn").addEventListener("click", () => {
+        const calls = GC.store.get("call_log", []);
+        let csv = "When,Caller,Village asked,Duration,Outcome\n";
+        calls.forEach(c => {
+          const when = new Date(c.at).toLocaleString("en-IN");
+          csv += when + "," + GC.esc(c.caller) + "," + GC.esc(c.village) + "," + GC.esc(c.dur) + "," + GC.esc(c.outcome) + "\n";
+        });
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = "call_log.csv";
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+
+      document.getElementById("srcLine").textContent = GC.FACTS.source;
+    }
+  </script>
+</body>
+</html>

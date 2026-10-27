@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Farmer dashboard — GRAMCAST AI</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <div class="topbar">
+      <div class="brand">
+        <h1>GRAMCAST AI</h1> <small>Farmer dashboard</small>
+      </div>
+      <nav class="topnav">
+        <a href="index.html">Home</a>
+        <a href="admin.html" id="navAdmin" style="display:none;">Admin</a>
+        <button class="btn-out" id="logoutBtn">Logout</button>
+      </nav>
+    </div>
+
+    <!-- search -->
+    <section class="card">
+      <h2>Apna gaon / Panchayat batayein
+        <span class="hi-sub">"Aap kis gaon ya Panchayat ke liye mausam ki jankari chahte hain?"</span>
+      </h2>
+      <div class="field" style="position:relative;">
+        <input id="q" autocomplete="off" placeholder="e.g. Bhondsi, Gurugram, Begusarai">
+        <div class="suggest" id="suggest"></div>
+      </div>
+      <button class="btn" id="goBtn">Get 5-day forecast</button>
+    </section>
+
+    <div class="msg err" id="err"></div>
+
+    <!-- saved locations -->
+    <section class="card" id="savedCard" style="display:none;">
+      <h2>Meri saved Panchayatein <span class="hi-sub">ek click mein dobara forecast</span></h2>
+      <div id="savedList"></div>
+    </section>
+
+    <!-- forecast + advisory -->
+    <section id="forecastArea"></section>
+
+    <!-- helpline -->
+    <section class="card">
+      <h2>Voice helpline <span class="hi-sub">seedha phone par sunkar aapke Panchayat ka mausam</span></h2>
+      <p class="sub">
+        📞 Dial <strong id="helpline">—</strong> • Agent <code id="agentId">—</code> •
+        Voice <span id="voiceName">—</span> • Language <span id="langName">—</span>
+      </p>
+      <p class="sub">The web dashboard and the phone agent use the same two Open-Meteo tools, so what you read
+        here is what the agent speaks — nothing more, nothing invented.</p>
+    </section>
+
+    <div class="footer">
+      GRAMCAST AI • Numbers shown come only from tool output • <span id="srcLine">—</span>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    const session = GC.auth.requireRole("user");
+    if (session) {
+      if (session.role === "admin") document.getElementById("navAdmin").style.display = "";
+      document.getElementById("logoutBtn").addEventListener("click", GC.auth.logout);
+
+      document.getElementById("helpline").textContent = GC.FACTS.phone + " (dial " + GC.FACTS.phone_dial + ")";
+      document.getElementById("agentId").textContent = GC.FACTS.agent;
+      document.getElementById("voiceName").textContent = GC.FACTS.voice;
+      document.getElementById("langName").textContent = GC.FACTS.language;
+      document.getElementById("srcLine").textContent = GC.FACTS.source;
+
+      const q = document.getElementById("q");
+      const sugBox = document.getElementById("suggest");
+      let selected = null, timer = null;
+
+      q.addEventListener("input", () => {
+        selected = null; clearTimeout(timer);
+        const name = q.value.trim();
+        if (name.length < 2) { sugBox.classList.remove("show"); return; }
+        timer = setTimeout(async () => {
+          try {
+            const hits = await GC.findPlaces(name, 8);
+            sugBox.innerHTML = "";
+            if (!hits.length) { sugBox.classList.remove("show"); return; }
+            hits.forEach(h => {
+              const b = GC.el("<button>" + GC.esc(h.place_name) +
+                "<small>" + GC.esc([h.district, h.region].filter(Boolean).join(", ")) +
+                " — (" + h.latitude + ", " + h.longitude + ")</small></button>");
+              b.addEventListener("click", () => { selected = h; q.value = GC.placeLabel(h); sugBox.classList.remove("show"); });
+              sugBox.appendChild(b);
+            });
+            sugBox.classList.add("show");
+          } catch { sugBox.classList.remove("show"); }
+        }, 350);
+      });
+
+      document.addEventListener("click", e => {
+        if (!e.target.closest("#suggest") && e.target !== q) sugBox.classList.remove("show");
+      });
+
+      /* ---- saved locations, per user ---- */
+      const locKey = "locs_" + session.id;
+      function renderSaved() {
+        const list = GC.store.get(locKey, []);
+        const card = document.getElementById("savedCard");
+        const box = document.getElementById("savedList");
+        card.style.display = list.length ? "" : "none";
+        box.innerHTML = "";
+        list.forEach((l, i) => {
+          const chip = GC.el('<span class="loc-chip">' + GC.esc(l.place_name) +
+            '<button title="remove" data-i="' + i + '">✕</button></span>');
+          chip.addEventListener("click", e => {
+            if (e.target.tagName !== "BUTTON") load(l);
+          });
+          chip.querySelector("button").addEventListener("click", e => {
+            e.stopPropagation();
+            const arr = GC.store.get(locKey, []); arr.splice(i, 1); GC.store.set(locKey, arr);
+            renderSaved();
+          });
+          box.appendChild(chip);
+        });
+      }
+      renderSaved();
+
+      /* ---- load a place ---- */
+      async function load(place) {
+        const err = document.getElementById("err");
+        const area = document.getElementById("forecastArea");
+        const btn = document.getElementById("goBtn");
+        err.classList.remove("show"); area.innerHTML = "";
+        btn.disabled = true; btn.textContent = "Fetching…";
+        try {
+          const w = await GC.getWeather(place, 5);
+          GC.logQuery(place, session);
+          area.innerHTML = buildForecast(place, w);
+          const saveBtn = document.getElementById("saveBtn");
+          if (saveBtn) saveBtn.addEventListener("click", () => {
+            const arr = GC.store.get(locKey, []);
+            if (!arr.some(x => x.latitude === place.latitude && x.longitude === place.longitude)) {
+              arr.unshift(place); GC.store.set(locKey, arr); renderSaved();
+            }
+            saveBtn.disabled = true;
+          });
+          window.scrollTo({ top: forecastArea.offsetTop - 20, behavior: "smooth" });
+        } catch (e2) {
+          err.textContent = e2.message || "Request failed."; err.classList.add("show");
+        } finally {
+          btn.disabled = false; btn.textContent = "Get 5-day forecast";
+        }
+      }
+
+      document.getElementById("goBtn").addEventListener("click", async () => {
+        try { selected = selected || await GC.findPlace(q.value.trim()); await load(selected); }
+        catch (e3) {
+          const err = document.getElementById("err");
+          err.textContent = e3.message || "Request failed."; err.classList.add("show");
+        }
+      });
+      q.addEventListener("keydown", e => { if (e.key === "Enter") document.getElementById("goBtn").click(); });
+
+      /* ---- render ---- */
+      function buildForecast(place, w) {
+        const d = w.daily, n = Math.min(5, d.time.length);
+        const today = {
+          weather_code: d.weather_code[0], temperature_2m_max: d.temperature_2m_max[0],
+          temperature_2m_min: d.temperature_2m_min[0], precipitation_probability_max: d.precipitation_probability_max[0],
+          precipitation_sum: d.precipitation_sum[0], precipitation_hours: d.precipitation_hours[0],
+        };
+        const cond = GC.wmoSpeech(today.weather_code);
+        const inten = GC.intensityFor(today);
+        const conf = GC.indicativeConfidence(today);
+        const adv = GC.advisoryFor(today);
+        const cls = adv.level === "bad" ? "bad" : adv.level === "warn" ? "warn" : "";
+
+        let html = '<section class="card">' +
+          '<div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:center;">' +
+            '<div><h2>' + GC.esc(GC.placeLabel(place)) + '</h2>' +
+            '<span class="w-detail">' + place.latitude + ", " + place.longitude + " • Source: " + GC.esc(GC.FACTS.source) + "</span></div>" +
+            '<button class="btn out sm" id="saveBtn">+ Save Panchayat</button></div>' +
+          '<div class="weather-now mt">' +
+            '<div class="temp-big">' + (w.current ? w.current.temperature_2m + "°C" : today.temperature_2m_max + "/" + today.temperature_2m_min + "°") + "</div>" +
+            '<div><div class="cond" style="font-size:1.15rem;">' + GC.esc(cond.hi) + "</div>" +
+            '<div class="w-detail">' + GC.esc(cond.en) + " • " + d.time[0] + "</div></div>" +
+          "</div>" +
+          '<div class="mt grid cols-4">' +
+            statCard("Baarish ki sambhavna", (today.precipitation_probability_max ?? "n/a") + "%") +
+            statCard("Intensity", GC.esc(inten.label.split(" / ")[0])) +
+            statCard("Max / Min", today.temperature_2m_max + " / " + today.temperature_2m_min + " °C") +
+            statCard("Confidence", GC.esc(conf.label), conf.chip) +
+          "</div>" +
+          '<div class="advisory ' + cls + ' mt">' +
+            "<strong>Kheti ke liye aaj:</strong><br>" + adv.lines.map(GC.esc).join("<br>") +
+          "</div></section>";
+
+        html += '<section class="card"><h2>Agale 5 din <span class="hi-sub">din-by-din, sambhavnatein hain — guarantee nahi</span></h2>' +
+          '<div class="grid cols-5 mt">';
+        for (let i = 0; i < n; i++) {
+          const day = {
+            weather_code: d.weather_code[i], temperature_2m_max: d.temperature_2m_max[i],
+            temperature_2m_min: d.temperature_2m_min[i], precipitation_probability_max: d.precipitation_probability_max[i],
+            precipitation_sum: d.precipitation_sum[i], precipitation_hours: d.precipitation_hours[i],
+          };
+          const c = GC.wmoSpeech(day.weather_code);
+          const intense = GC.intensityFor(day);
+          const cardCls = intense.level === "heavy" ? "rainy" : (Number(day.temperature_2m_max) >= 38 ? "hot" : "");
+          html += '<div class="day-card ' + cardCls + '">' +
+            '<div class="d">' + d.time[i] + "</div>" +
+            '<div class="cond">' + GC.esc(c.hi) + "</div>" +
+            '<div class="row"><span>Max/Min</span><span>' + day.temperature_2m_max + " / " + day.temperature_2m_min + "</span></div>" +
+            '<div class="row"><span>Rain prob</span><span>' + (day.precipitation_probability_max ?? "n/a") + "%</span></div>" +
+            '<div class="row"><span>Rain</span><span>' + (day.precipitation_sum ?? "n/a") + " mm</span></div>" +
+            '<div class="row"><span>Intensity</span><span>' + GC.esc(intense.label.split(" / ")[0]) + "</span></div>" +
+            "</div>";
+        }
+        html += "</div></section>";
+        return html;
+
+        function statCard(label, value, chipCls) {
+          return '<div class="day-card stat" style="padding:12px;">' +
+            '<div class="l" style="color:var(--muted); font-size:0.8rem;">' + label + "</div>" +
+            '<div style="font-weight:700; margin-top:4px;">' + value + "</div>" +
+            (chipCls ? '<div class="chip ' + chipCls + '" style="margin-top:6px;">confidence-ish</div>' : "") +
+            "</div>";
+        }
+      }
+
+      /* gentle demo: prefill last used place */
+      const lastQ = GC.store.get("lastq_" + session.id, null);
+      if (lastQ) { q.value = lastQ; document.getElementById("goBtn").click(); }
+      window.addEventListener("beforeunload", () => { if (selected) GC.store.set("lastq_" + session.id, q.value); });
+    }
+  </script>
+</body>
+</html>

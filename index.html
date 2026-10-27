@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GRAMCAST AI — Pasayat-level weather advisory for farmers</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <div class="topbar">
+      <div class="brand">
+        <h1>GRAMCAST AI</h1>
+        <small>गाँव का मौसम, सिर्फ़ सच्चे डेटा से</small>
+      </div>
+      <nav class="topnav">
+        <a href="dashboard.html">Farmer dashboard</a>
+        <a href="admin.html">Admin</a>
+        <a href="login.html" id="navAuth">Login</a>
+      </nav>
+    </div>
+
+    <section class="hero">
+      <h1>Aapke Panchayat ka mausam, on the phone.</h1>
+      <p class="lead">
+        Voice-based agro-meteorological advisory that converts localized Panchayat-level weather
+        forecasts into simple, spoken, actionable advisories for farmers and rural users.
+        Numbers are spoken <strong>only</strong> from verified tool output — never invented.
+      </p>
+      <div class="actions">
+        <button class="btn" onclick="location.href='login.html'">Get started (demo)</button>
+        <button class="btn out" onclick="location.href='dashboard.html'">Try a forecast</button>
+      </div>
+      <p style="margin-top:18px; font-size:0.9rem; opacity:0.85;">
+        📞 Live helpline: dial <strong id="heroPhone">—</strong> &nbsp;•&nbsp;
+        <span id="heroAgent">—</span>
+      </p>
+    </section>
+
+    <!-- quick forecast demo -->
+    <section class="card" id="quickbox">
+      <h2>Quick forecast demo
+        <span class="hi-sub">Kisi bhi Panchayat ka 3-din ka haal — vahi data jo voice agent bolta hai</span>
+      </h2>
+      <p class="sub">Search a village / Panchayat / block / district (India-restricted, agent's own geocoder):</p>
+      <div class="field" style="position:relative;">
+        <input id="q" autocomplete="off" placeholder="e.g. Bhondsi, Gurugram, Begusarai">
+        <div class="suggest" id="suggest"></div>
+      </div>
+      <button class="btn" id="goBtn" style="width:auto;">Get forecast</button>
+      <div class="msg err" id="quickErr"></div>
+      <div id="quickOut"></div>
+    </section>
+
+    <section class="grid cols-3">
+      <div class="card feature">
+        <h3>🛠 Tool-grounded answers</h3>
+        <p>Every number flows through <code>find_place</code> → <code>get_weather</code>.
+           If the tool returns nothing, the agent says NO DATA — it never estimates or interpolates.</p>
+      </div>
+      <div class="card feature">
+        <h3>🎙 Sarvam voice agent</h3>
+        <p>Exotel telephony (<span id="featPhone">—</span>) connects to a Sarvam agent. Voice
+           <span id="featVoice">—</span>, default language <span id="featLang">—</span>. Hindi answer, English
+           answer, other Indian languages supported.</p>
+      </div>
+      <div class="card feature">
+        <h3>🌧 Rain: probability + intensity</h3>
+        <p>"70% baarish ki sambhavna hai" is never "baarish zaroor hogi."
+           Forecast confidence is phrased honestly and fallbacks are never hidden.</p>
+      </div>
+      <div class="card feature">
+        <h3>⚠ Heavy rain & heat</h3>
+        <p>Heavy-risk days get preparedness guidance with confidence stated — no exaggerated,
+           invented disaster warnings.</p>
+      </div>
+      <div class="card feature">
+        <h3>🗣 Advisory-first arcs</h3>
+        <p>Location first, one question at a time, short spoken answers: location → date → condition →
+           temperature → rain → confidence → farming advisory.</p>
+      </div>
+      <div class="card feature">
+        <h3>📊 Data honesty</h3>
+        <p>Only Open-Meteo model data is used and identified as such. A village name is not
+           forecast data — coordinates are not a forecast.</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Architecture <span class="hi-sub">jaisa repo ke README mein bataya gaya hai</span></h2>
+      <div class="ascii" id="arch"></div>
+      <div class="provenance">Source: GitHub README — https://github.com/rajputishika937-ui/gram-cast-</div>
+    </section>
+
+    <section class="footer">
+      GRAMCAST AI • Open-Meteo model data (keyless) • Zero-invention guardrails enforced on every answer •
+      <a href="https://github.com/rajputishika937-ui/gram-cast-" target="_blank" rel="noopener">GitHub</a>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    // fill agent facts
+    document.getElementById("heroPhone").textContent = GC.FACTS.phone + " (dial " + GC.FACTS.phone_dial + ")";
+    document.getElementById("heroAgent").textContent = "Agent: " + GC.FACTS.agent + " • " + GC.FACTS.deploy + " • 24/7";
+    document.getElementById("featPhone").textContent = GC.FACTS.phone;
+    document.getElementById("featVoice").textContent = GC.FACTS.voice;
+    document.getElementById("featLang").textContent = GC.FACTS.language;
+
+    document.getElementById("arch").textContent =
+`Caller  ⇄  Exotel  ⇄  Sarvam voice agent  (${GC.FACTS.agent})
+                         |
+                states.start.tool_names
+                         |
+     ┌───────────────────┴───────────────────┐
+ find_place                            get_weather
+ Open-Meteo geocoding                  Open-Meteo forecast
+ (place → lat/lon/district)            (lat/lon → 5-day weather)`;
+
+    // nav auth button reflects session
+    GC.auth.seed();
+    const s = GC.auth.session();
+    document.getElementById("navAuth").textContent = s ? s.name + " — dashboard" : "Login";
+    document.getElementById("navAuth").href = s ? (s.role === "admin" ? "admin.html" : "dashboard.html") : "login.html";
+
+    /* ---- quick demo: same data path, mini version ---- */
+    const q = document.getElementById("q");
+    const sugBox = document.getElementById("suggest");
+    let selected = null, timer = null;
+
+    q.addEventListener("input", () => {
+      selected = null;
+      clearTimeout(timer);
+      const name = q.value.trim();
+      if (name.length < 2) { sugBox.classList.remove("show"); return; }
+      timer = setTimeout(async () => {
+        try {
+          const hits = await GC.findPlaces(name, 8);
+          sugBox.innerHTML = "";
+          if (!hits.length) { sugBox.classList.remove("show"); return; }
+          hits.forEach(h => {
+            const b = GC.el("<button>" + GC.esc(h.place_name) +
+              "<small>" + GC.esc([h.district, h.region].filter(Boolean).join(", ")) +
+              " — (" + h.latitude + ", " + h.longitude + ")</small></button>");
+            b.addEventListener("click", () => { selected = h; q.value = GC.placeLabel(h); sugBox.classList.remove("show"); });
+            sugBox.appendChild(b);
+          });
+          sugBox.classList.add("show");
+        } catch { sugBox.classList.remove("show"); }
+      }, 350);
+    });
+
+    document.addEventListener("click", e => {
+      if (!e.target.closest("#quickbox") || (!e.target.closest("#suggest") && e.target !== q)) {
+        sugBox.classList.remove("show");
+      }
+    });
+
+    document.getElementById("goBtn").addEventListener("click", async () => {
+      const errBox = document.getElementById("quickErr");
+      const out = document.getElementById("quickOut");
+      errBox.classList.remove("show"); out.innerHTML = "";
+      const btn = document.getElementById("goBtn");
+      try {
+        btn.disabled = true; btn.textContent = "Fetching…";
+        const place = selected || await GC.findPlace(q.value.trim());
+        const w = await GC.getWeather(place, 3);
+        GC.logQuery(place, null);
+
+        const d = w.daily;
+        let html = '<div class="mt grid cols-3">';
+        for (let i = 0; i < Math.min(3, d.time.length); i++) {
+          const day = { weather_code: d.weather_code[i], temperature_2m_max: d.temperature_2m_max[i],
+            temperature_2m_min: d.temperature_2m_min[i], precipitation_probability_max: d.precipitation_probability_max[i],
+            precipitation_sum: d.precipitation_sum[i], precipitation_hours: d.precipitation_hours[i] };
+          const c = GC.wmoSpeech(day.weather_code);
+          const inten = GC.intensityFor(day);
+          const cls = day.precipitation_probability_max >= 70 ? "rainy" : (Number(day.temperature_2m_max) >= 38 ? "hot" : "");
+          html += '<div class="day-card ' + cls + '">' +
+            '<div class="d">' + d.time[i] + '</div>' +
+            '<div class="cond">' + GC.esc(c.hi) + '</div>' +
+            '<div class="row"><span>Max / Min</span><span>' + day.temperature_2m_max + " / " + day.temperature_2m_min + " °C</span></div>" +
+            '<div class="row"><span>Baarish ki sambhavna</span><span>' + (day.precipitation_probability_max ?? "n/a") + "%</span></div>" +
+            '<div class="row"><span>Intensity</span><span>' + GC.esc(inten.label.split(" / ")[0]) + '</span></div>' +
+            '<div class="row"><span>Total</span><span>' + (day.precipitation_sum ?? "n/a") + " mm</span></div>" +
+            "</div>";
+        }
+        html += "</div>";
+        html += '<div class="provenance">Location: ' + GC.esc(GC.placeLabel(place)) +
+          " (" + place.latitude + ", " + place.longitude + ") • Source: " + GC.esc(GC.FACTS.source) + "</div>";
+        out.innerHTML = html;
+      } catch (err) {
+        errBox.textContent = err.message || "Request failed.";
+        errBox.classList.add("show");
+      } finally {
+        btn.disabled = false; btn.textContent = "Get forecast";
+      }
+    });
+  </script>
+</body>
+</html>

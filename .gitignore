@@ -2,3 +2,9 @@
 .freebuff/
 .agents/
 node_modules/
+
+# deploy build artifacts — do not commit
+dist/
+dist-worker.js
+deploy.json
+deploy/

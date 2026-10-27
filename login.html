@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login — GRAMCAST AI</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container" style="max-width:460px;">
+    <div class="topbar" style="justify-content:center;">
+      <div class="brand">
+        <h1>GRAMCAST AI</h1>
+        <small>Sign in</small>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:20px;">
+      <div class="tabs">
+        <button id="tabLogin" class="on">Login</button>
+        <button id="tabSignup">New user (signup)</button>
+      </div>
+
+      <form id="loginForm">
+        <div class="field">
+          <label>Username</label>
+          <input id="l_user" autocomplete="username">
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input id="l_pass" type="password" autocomplete="current-password">
+        </div>
+        <button class="btn" type="submit" style="width:100%;">Sign in</button>
+      </form>
+
+      <form id="signupForm" style="display:none;">
+        <div class="field">
+          <label>Full name</label>
+          <input id="s_name">
+        </div>
+        <div class="field">
+          <label>Choose username</label>
+          <input id="s_user" autocomplete="username">
+        </div>
+        <div class="field">
+          <label>Choose password</label>
+          <input id="s_pass" type="password" autocomplete="new-password">
+        </div>
+        <button class="btn" type="submit" style="width:100%;">Create farmer account</button>
+        <p class="sub mt">New signups get the farmer role. Admin access is provisioned by the operator.</p>
+      </form>
+
+      <div class="msg err" id="msg"></div>
+
+      <div class="provenance mt">
+        Demo accounts — farmer: <code>farmer / farmer123</code> • admin: <code>admin / admin123</code>
+      </div>
+    </div>
+
+    <div class="footer">
+      <a href="index.html">← back to landing page</a>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    GC.auth.seed();
+    const s = GC.auth.session();
+    if (s) location.href = s.role === "admin" ? "admin.html" : "dashboard.html";
+
+    const tl = document.getElementById("tabLogin"), ts = document.getElementById("tabSignup");
+    const lf = document.getElementById("loginForm"), sf = document.getElementById("signupForm");
+    const msg = document.getElementById("msg");
+    function showErr(t) { msg.textContent = t; msg.classList.add("show"); }
+    function hideErr() { msg.classList.remove("show"); }
+
+    tl.addEventListener("click", () => { tl.classList.add("on"); ts.classList.remove("on"); lf.style.display = ""; sf.style.display = "none"; hideErr(); });
+    ts.addEventListener("click", () => { ts.classList.add("on"); tl.classList.remove("on"); sf.style.display = ""; lf.style.display = "none"; hideErr(); });
+
+    lf.addEventListener("submit", e => {
+      e.preventDefault(); hideErr();
+      const u = GC.auth.login(document.getElementById("l_user").value.trim(),
+                              document.getElementById("l_pass").value);
+      if (!u) { showErr("Wrong username or password."); return; }
+      if (u.blocked) { showErr("Aapka account block kiya gaya hai — kripya operator se sampark karein. / Your account has been blocked. Contact the operator."); return; }
+      location.href = u.role === "admin" ? "admin.html" : "dashboard.html";
+    });
+
+    sf.addEventListener("submit", e => {
+      e.preventDefault(); hideErr();
+      const r = GC.auth.signup(document.getElementById("s_name").value.trim(),
+                               document.getElementById("s_user").value.trim(),
+                               document.getElementById("s_pass").value);
+      if (r.error) { showErr(r.error); return; }
+      location.href = "dashboard.html";
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GRAMCAST AI - Farmer Panel</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+      background: #f5f7fa;
+      min-height: 100vh;
+      color: #2c3e50;
+      padding: 20px;
+    }
+    .container { max-width: 800px; margin: 0 auto; }
+    .header { 
+      text-align: center; 
+      margin-bottom: 30px;
+      padding: 20px;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .header h1 { color: #2d3436; margin-bottom: 10px; }
+    .header p { color: #636e72; font-size: 1rem; }
+    
+    .location-card { 
+      background: white; 
+      padding: 30px; 
+      border-radius: 16px; 
+      text-align: center;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+    }
+    .location-card h2 { color: #2d3436; margin-bottom: 10px; font-size: 1.5rem; }
+    .location-card p { color: #636e72; font-size: 1.1rem; }
+    
+    .weather-summary { 
+      background: white; 
+      padding: 25px; 
+      border-radius: 12px; 
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      display: none;
+    }
+    .weather-summary.visible { display: block; }
+    .weather-summary h2 { color: #2d3436; margin-bottom: 20px; }
+    
+    .weather-item { 
+      margin: 15px 0; 
+      padding: 10px 0; 
+      border-bottom: 1px solid #eee;
+    }
+    .weather-item:last-child { border-bottom: none; }
+    .weather-item strong { color: #575d66; display: block; margin-bottom: 4px; }
+    .weather-item span { color: #7f8c8d; font-size: 0.9rem; }
+    
+    .advisory { 
+      background: #ebf5fb; 
+      padding: 20px; 
+      border-radius: 10px; 
+      margin: 20px 0;
+      border-left: 4px solid #3498db;
+    }
+    .advisory h3 { color: #2c3e50; margin-bottom: 10px; }
+    .advisory p { color: #34495e; line-height: 1.6; }
+    
+    .no-data { 
+      text-align: center; 
+      padding: 40px; 
+      color: #7f8c8d;
+    }
+    
+    .nav { 
+      text-align: center; 
+      margin: 25px 0;
+    }
+    .nav a { 
+      margin: 0 15px; 
+      color: #1abc9c; 
+      text-decoration: none; 
+      font-weight: 500;
+      transition: color 0.3s;
+    }
+    .nav a:hover { color: #16a085; }
+    
+    .footer { 
+      text-align: center; 
+      margin-top: 40px; 
+      font-size: 0.8rem; 
+      color: #7f8c8d;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>GRAMCAST AI</h1>
+      <p>Weather advisory for farmers</p>
+    </div>
+    
+    <div class="location-card">
+      <h2>Enter Your Panchayat</h2>
+      <p>Get localized weather forecast for your farming activities</p>
+      <input type="text" id="farmerLocation" placeholder="e.g., Bhondsi Panchayat" style="width: 65%; padding: 10px; margin: 10px 0; border: 2px solid #dfe6e9; border-radius: 6px;">
+      <button style="padding: 10px 20px; background: #1abc9c; color: white; border: none; border-radius: 6px; cursor: pointer;">Get Forecast</button>
+    </div>
+    
+    <div class="weather-summary" id="weatherSummary">
+      <h2>Today's Weather</h2>
+      <div class="weather-item" id="weatherLocation"></div>
+      <div class="weather-item" id="weatherCondition"></div>
+      <div class="weather-item" id="weatherTemp"></div>
+      <div class="weather-item" id="weatherRain"></div>
+      <div class="weather-item" id="weatherConfidence"></div>
+    </div>
+    
+    <div class="advisory" id="advisory" style="display: none;">
+      <h3>Farming Advisory</h3>
+      <p id="advisoryText">Based on the weather forecast, here are recommendations for your farming activities.</p>
+    </div>
+    
+    <div class="no-data" id="noData" style="display: none;">
+      <p>Weather forecast data is currently unavailable. Please try again later.</p>
+    </div>
+    
+    <div class="nav">
+      <a href="index.html">Weather Details</a>
+      <a href="admin.html">Admin</a>
+    </div>
+    
+    <div class="footer">
+      GRAMCAST AI • Agro-meteorological advisory • Real forecast data only
+    </div>
+  </div>
+
+  <script>
+    // Open-Meteo API endpoints
+    const GEO_URL = 'https://geocoding-api.open-meteo.com/v1/search';
+    const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
+    
+    // WMO weather code to Hindi/English translation (from the project)
+    function wmoSpeech(code) {
+      if (code == null) return 'unknown';
+      if (code <= 2) return 'saaf / mainly saaf aasmaan';
+      if (code === 3) return 'badal chhaaye hue';
+      if (code <= 48) return 'kohra';
+      if (code <= 57) return 'halki runha / buund';
+      if (code <= 65) return 'baarish';
+      if (code <= 77) return 'fauwara / baraf ki larhi';
+      if (code <= 82) return 'barasi / garaj-chamak';
+      if (code <= 86) return 'outha hua baarish';
+      if (code === 95) return 'gajargur-aandhi';
+      return 'kaada garaj purviandhi';
+    }
+    
+    // Format confidence level
+    function formatConfidence(code, probability) {
+      // Simple confidence based on probability and code
+      if (probability > 80) return 'High';
+      if (probability > 50) return 'Medium';
+      if (code >= 61 && code <= 65) return 'Medium';
+      return 'Low';
+    }
+    
+    // Show data on page
+    function showWeather(data, place) {
+      const summary = document.getElementById('weatherSummary');
+      const noData = document.getElementById('noData');
+      
+      summary.classList.add('visible');
+      noData.style.display = 'none';
+      
+      // Location
+      document.getElementById('weatherLocation').innerHTML = 
+        `<strong>Location:</strong> ${place.place_name}${place.district ? ', ' + place.district : ''}`;
+      
+      // Condition
+      const code = data.daily.weather_code[0];
+      const condition = wmoSpeech(code);
+      document.getElementById('weatherCondition').innerHTML = 
+        `<strong>Condition:</strong> ${condition}`;
+      
+      // Temperature
+      const maxTemp = data.daily.temperature_2m_max[0];
+      const minTemp = data.daily.temperature_2m_min[0];
+      document.getElementById('weatherTemp').innerHTML = 
+        `<strong>Temperature:</strong> ${minTemp}°C - ${maxTemp}°C`;
+      
+      // Rain probability
+      const rainProb = data.daily.precipitation_probability_max[0];
+      document.getElementById('weatherRain').innerHTML = 
+        `<strong>Rain Probability:</strong> ${rainProb}%`;
+      
+      // Confidence
+      const confidence = formatConfidence(code, rainProb);
+      document.getElementById('weatherConfidence').innerHTML = 
+        `<strong>Confidence:</strong> ${confidence}`;
+      
+      // Generate advisory
+      const advisory = document.getElementById('advisory');
+      const advisoryText = document.getElementById('advisoryText');
+      
+      if (rainProb > 70) {
+        advisoryText.innerHTML = 'High rain probability detected. Consider postponing outdoor farming activities like irrigation and spraying. Protect harvested crops and ensure proper drainage.';
+      } else if (rainProb > 40) {
+        advisoryText.innerHTML = 'Moderate rain chance. If planning irrigation, time it appropriately. Keep farming operations flexible based on actual conditions.';
+      } else {
+        advisoryText.innerHTML = 'Low rain probability. Good conditions for outdoor farming operations like sowing, harvesting, and field work. Monitor weather updates.';
+      }
+      
+      advisory.classList.add('visible');
+    }
+    
+    // Handle location input
+    document.querySelector('.location-card button').addEventListener('click', async () => {
+      const location = document.getElementById('farmerLocation').value.trim();
+      if (!location) {
+        alert('Please enter your Panchayat name');
+        return;
+      }
+      
+      const summary = document.getElementById('weatherSummary');
+      const btn = document.querySelector('.location-card button');
+      const noData = document.getElementById('noData');
+      
+      summary.classList.remove('visible');
+      noData.style.display = 'none';
+      
+      btn.disabled = true;
+      btn.textContent = 'Fetching...';
+      
+      try {
+        // Step 1: Geocode the location
+        const geoRes = await fetch(`${GEO_URL}?name=${encodeURIComponent(location)}&country=IN&count=1`);
+        if (!geoRes.ok) throw new Error(`Geocoding failed: ${geoRes.status}`);
+        const geoData = await geoRes.json();
+        const hit = geoData.results && geoData.results[0];
+        
+        if (!hit) {
+          throw new Error(`Maaf kijiye, mujhe is location ka exact Panchayat forecast verify nahi mil raha. Kripya sahi naam batayein.`);
+        }
+        
+        // Step 2: Get weather forecast
+        const lat = hit.latitude;
+        const lon = hit.longitude;
+        const foreRes = await fetch(`${FORECAST_URL}?latitude=${lat}&longitude=${lon}&current=weather_code,temperature_2m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum&timezone=Asia/Kolkata`);
+        if (!foreRes.ok) throw new Error(`Forecast unavailable: ${foreRes.status}`);
+        const foreData = await foreRes.json();
+        
+        if (!foreData.daily) {
+          throw new Error('Weather forecast data not available at this time.');
+        }
+        
+        // Display the data
+        showWeather(foreData, hit);
+        
+      } catch (err) {
+        showError(err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Get Forecast';
+      }
+    });
+    
+    function showError(message) {
+      const summary = document.getElementById('weatherSummary');
+      const noData = document.getElementById('noData');
+      
+      summary.classList.remove('visible');
+      noData.style.display = 'block';
+      
+      // Show error in noData area
+      const noDataText = noData.querySelector('p');
+      if (noDataText) noDataText.textContent = message;
+    }
+    
+    // Initialize: try with a default location or just show the form
+    document.getElementById('farmerLocation').focus();
+  </script>
+</body>
+</html>
