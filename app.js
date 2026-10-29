@@ -20,43 +20,14 @@ const GC = (() => {
     set(key, arr);
   }
 
-  /* ---------- demo auth ---------- */
+  // session: no demo login anymore. A person is identified by a site visit.
   function seedUsers() {
     if (!get("users", null)) {
-      set("users", [
-        { id: 1, name: "Administrator", user: "admin", pass: "admin123", role: "admin" },
-        { id: 2, name: "Kisan (Demo Farmer)", user: "farmer", pass: "farmer123", role: "user" },
-      ]);
+      set("users", []);
     }
   }
-  function session() { return get("session", null); }
-  function login(username, pass) {
-    seedUsers();
-    const u = get("users", []).find(u => u.user === username && u.pass === pass);
-    if (!u) return null;               // wrong credentials
-    if (u.blocked) return { blocked: true };
-    const s = { id: u.id, name: u.name, user: u.user, role: u.role, at: Date.now() };
-    set("session", s);
-    return s;
-  }
-  function setBlocked(id, blocked) {
-    const users = get("users", []);
-    const u = users.find(x => x.id === id);
-    if (u) { u.blocked = !!blocked; set("users", users); }
-  }
-  function signup(name, username, pass) {
-    seedUsers();
-    const users = get("users", []);
-    if (users.some(u => u.user === username)) return { error: "This username already exists." };
-    if (!username || !pass) return { error: "Enter a username and password." };
-    const id = users.reduce((m, u) => Math.max(m, u.id), 0) + 1;
-    const u = { id, name: name || username, user: username, pass, role: "user" };
-    users.push(u); set("users", users);
-    const s = { id, name: u.name, user: u.user, role: "user", at: Date.now() };
-    set("session", s);
-    return s;
-  }
-  function logout() { localStorage.removeItem("gc_session"); location.href = "login.html"; }
+  function session() { return null; }
+  function logout() { location.href = "index.html"; }
   function requireRole(role) {
     const s = session();
     if (!s) { location.href = "login.html"; return null; }
@@ -239,7 +210,7 @@ const GC = (() => {
     wmoSpeech, intensityFor, indicativeConfidence, advisoryFor,
     placeLabel, esc, el, FACTS,
     store: { get, set, push },
-    auth: { login, signup, session, logout, requireRole, seed: seedUsers, setBlocked },
+    auth: { session, logout, requireRole, seed: seedUsers, loginSubmit },
   };
   // Attach to global window so inline scripts can access GC
   window.GC = GC;
