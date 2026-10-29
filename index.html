@@ -86,12 +86,6 @@
       </div>
     </section>
 
-    <section class="card">
-      <h2>Architecture <span class="hi-sub">jaisa repo ke README mein bataya gaya hai</span></h2>
-      <div class="ascii" id="arch"></div>
-      <div class="provenance">Source: GitHub README — https://github.com/rajputishika937-ui/gram-cast-</div>
-    </section>
-
     <section class="footer">
       GRAMCAST AI • Open-Meteo model data (keyless) • Zero-invention guardrails enforced on every answer •
       <a href="https://github.com/rajputishika937-ui/gram-cast-" target="_blank" rel="noopener">GitHub</a>
@@ -106,16 +100,6 @@
     document.getElementById("featPhone").textContent = GC.FACTS.phone;
     document.getElementById("featVoice").textContent = GC.FACTS.voice;
     document.getElementById("featLang").textContent = GC.FACTS.language;
-
-    document.getElementById("arch").textContent =
-`Caller  ⇄  Exotel  ⇄  Sarvam voice agent  (${GC.FACTS.agent})
-                         |
-                states.start.tool_names
-                         |
-     ┌───────────────────┴───────────────────┐
- find_place                            get_weather
- Open-Meteo geocoding                  Open-Meteo forecast
- (place → lat/lon/district)            (lat/lon → 5-day weather)`;
 
     // nav auth button reflects session
     GC.auth.seed();
