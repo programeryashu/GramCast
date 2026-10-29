@@ -8,3 +8,5 @@ dist/
 dist-worker.js
 deploy.json
 deploy/
+.vercel
+.env*
